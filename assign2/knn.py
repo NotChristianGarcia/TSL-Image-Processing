@@ -2,10 +2,10 @@ import os
 import numpy as np
 from matplotlib import pyplot as plt
 
-img_dataset_train_path = os.path.normpath('cifar-100/train')
-img_dataset_test_path = os.path.normpath('cifar-100/test')
+trainPath = os.path.normpath('cifar-100/train')
+testPath = os.path.normpath('cifar-100/test')
 
-CIFAR100_LABELS_LIST = [
+cifarLabelList = [
     'apple', 'aquarium_fish', 'baby', 'bear', 'beaver', 'bed', 'bee', 'beetle',
     'bicycle', 'bottle', 'bowl', 'boy', 'bridge', 'bus', 'butterfly', 'camel',
     'can', 'castle', 'caterpillar', 'cattle', 'chair', 'chimpanzee', 'clock',
@@ -23,49 +23,40 @@ CIFAR100_LABELS_LIST = [
     'worm'
 ]
 
-def display_img(name, img, show=True, cmap='gray'):
-    figure = plt.figure()
-    axes = plt.axes()
-    axes.set_title(name)
-    axes.imshow(img, cmap=cmap)
-    if show:
-        plt.show()
 
 def unpickle(file):
     import pickle
-    with open(file, 'rb') as fo:
-        dict = pickle.load(fo, encoding='bytes')
-    return dict
+    with open(file, 'rb') as pickledFile:
+        dataSet = pickle.load(pickledFile, encoding='bytes')
+    return dataSet
+
 
 def get_data(data_path, as_str=True):
     dataset = unpickle(data_path)
     imgs = np.array(dataset[b'data'], dtype=np.uint8)
     labels = np.array(dataset[b'fine_labels'], dtype=np.uint8).reshape(-1, 1)
-
+    
     if as_str:
-        train_lbls_str = np.array([CIFAR100_LABELS_LIST[i[0]] for i in labels])
-        return imgs, labels, train_lbls_str
-
+        trainLblsStr = np.array([cifarLabelList[i[0]] for i in labels])
+        return imgs, labels, trainLblsStr
     return imgs, labels
 
+
 class knn:
-    def __init__(self, k):
-        self.k = k
+    def __init__(self, numK, trainImgs, numLabels):
+        self.k = numK
+        self.trainImgs = trainImgs
+        self.numLabels = numLabels
 
-    def train(self, X, y):
-        self.testData = X
-        self.dataLabels = y
-
-    def predict(self, X):
-        items = X.shape[0]
-        print(X.shape[0])
+    def predict(self, testImgs):
+        items = len(testImgs)
         predictions = np.zeros(items)
 
         for i in range(items):
-            distances = np.reshape(np.sqrt(np.sum(np.square(self.testData - X[i, :]), axis=1)), (-1, 1))
- 
+            distances = np.reshape(np.sqrt(np.sum(np.square(self.trainImgs - testImgs[i, :]), axis=1)), (-1, 1))
+
             # Along with the distance stack the labels so that we can vote easily
-            distance_label = np.hstack((distances, self.dataLabels))
+            distance_label = np.hstack((distances, self.numLabels))
 
             # Simple majoridataLabels voting based on the minimum distance
             sorted_distance = distance_label[distance_label[:, 0].argsort()]
@@ -73,31 +64,39 @@ class knn:
             (labels, occurence) = np.unique(k_sorted_distance[:, 1], return_counts=True)
             label = labels[occurence.argsort()[0]]
             predictions[i] = label
-            
-            print("{} of {}.".format(i+1, items))
 
+            print("{} of {}.".format(i+1, items))
         return predictions
 
-def showImg(testImgs, predLabelNum, start, end):
-    # Assume image size is 32 x 32. First 1024 px is r, next 1024 px is g, last 1024 px is b from the (r,g b) channel
-    k = 0
-    for i in range(start, end):
-        j = testImgs[0][i]
+    def checkAccuracy(self, testLabelNum, predLabelNum, testStart, testEnd):
+        correct = 0
+        dataSize = len(predLabelNum)
+        for i, offsetI in enumerate(range(testStart, testEnd)):
+            if testLabelNum[offsetI] == predLabelNum[i]:
+                correct += 1
+        print("{} correct in test of {}.".format(correct, dataSize))
+        return correct
+
+
+def showImg(testImgs, predLabelNum, testStart, testEnd):
+    for i, offsetI in enumerate(range(testStart, testEnd)):
+        j = testImgs[0][offsetI]
         r = j[:1024].reshape(32, 32)
         g = j[1024:2048].reshape(32, 32)
         b = j[2048:].reshape(32, 32)
         rgb = np.dstack([r, g, b])
         plt.imshow(rgb)
-        plt.title("real:pred - {}:{}".format(testImgs[2][i], CIFAR100_LABELS_LIST[int(predLabelNum[k])]))
+        plt.title("real:pred - {}:{}".format(testImgs[2][offsetI], cifarLabelList[int(predLabelNum[i])]))
         plt.show()
-        k = k + 1
+
 
 if __name__ == "__main__":
-    start = 400
-    end = 500
-    trainData = get_data(img_dataset_train_path)
-    testData = get_data(img_dataset_test_path)
-    KNN = knn(3)
-    KNN.train(trainData[0], trainData[1])
-    predictions = KNN.predict(testData[0][400:450,:])
-    showImg(testData, predictions, start, end)
+    testStart = 0
+    testEnd = 500
+    k = 3
+    trainData = get_data(trainPath)
+    testData = get_data(testPath)
+    KNN = knn(k, trainData[0], trainData[1])
+    predictions = KNN.predict(testData[0][testStart:testEnd, :])
+    KNN.checkAccuracy(testData[1], predictions, testStart, testEnd)
+    #showImg(testData, predictions, testStart, testEnd)
